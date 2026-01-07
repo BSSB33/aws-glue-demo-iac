@@ -123,22 +123,60 @@ Check the destination folder for Parquet output:
 aws s3 ls s3://vitraiaws-etl-demo-project/destination/ --recursive --profile vitraigabor
 ```
 
-## Running the Pipeline Manually
+## Running the Pipeline
 
-### Trigger Crawler
+The pipeline requires manual execution of the ETL job and destination crawler:
 
-```bash
-aws glue start-crawler \
-  --name etl-demo-project-source-crawler \
-  --region eu-west-1 \
-  --profile vitraigabor
-```
+### Step 1: Run the ETL Job
 
-### Trigger ETL Job
+After `terraform apply`, the source data is cataloged automatically. Run the transformation job:
 
 ```bash
 aws glue start-job-run \
   --job-name etl-demo-project-etl-job \
+  --region eu-west-1 \
+  --profile vitraigabor
+```
+
+**Job Duration**: ~2-4 minutes for ~8,800 Netflix titles
+
+### Step 2: Catalog the Transformed Data
+
+**Important**: After the Glue job completes successfully, run the destination crawler to catalog the transformed Parquet files:
+
+```bash
+aws glue start-crawler \
+  --name etl-demo-project-destination-crawler \
+  --region eu-west-1 \
+  --profile vitraigabor
+```
+
+**Crawler Duration**: ~30 seconds
+
+### Step 3: Query in Athena
+
+Once the destination crawler completes, you can query the transformed data:
+
+```sql
+-- Query source data (CSV)
+SELECT * FROM "etl-demo-project-db"."source" LIMIT 10;
+
+-- Query transformed data (Parquet)
+SELECT * FROM "etl-demo-project-db"."destination" LIMIT 10;
+
+-- Compare row counts
+SELECT 'source' as table_name, COUNT(*) as row_count FROM "etl-demo-project-db"."source"
+UNION ALL
+SELECT 'destination' as table_name, COUNT(*) as row_count FROM "etl-demo-project-db"."destination";
+```
+
+### Optional: Manually Trigger Source Crawler
+
+The source crawler auto-runs during `terraform apply`, but you can trigger it manually if needed:
+
+```bash
+aws glue start-crawler \
+  --name etl-demo-project-source-crawler \
   --region eu-west-1 \
   --profile vitraigabor
 ```

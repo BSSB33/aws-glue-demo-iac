@@ -26,9 +26,14 @@ output "glue_database_name" {
 }
 
 # Glue Crawler Outputs
-output "glue_crawler_name" {
-  description = "Name of the Glue crawler"
+output "glue_source_crawler_name" {
+  description = "Name of the source Glue crawler"
   value       = aws_glue_crawler.source_crawler.name
+}
+
+output "glue_destination_crawler_name" {
+  description = "Name of the destination Glue crawler"
+  value       = aws_glue_crawler.destination_crawler.name
 }
 
 # Glue Job Outputs

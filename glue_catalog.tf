@@ -50,7 +50,35 @@ resource "aws_glue_crawler" "source_crawler" {
   }
 }
 
-# Auto-trigger crawler to sync schema changes
+# Glue Crawler for Destination Data (Parquet)
+resource "aws_glue_crawler" "destination_crawler" {
+  name          = "${var.project_name}-destination-crawler"
+  database_name = aws_glue_catalog_database.etl_database.name
+  role          = aws_iam_role.glue_role.arn
+  description   = "Crawler for transformed Parquet data in S3"
+
+  s3_target {
+    path = "s3://${aws_s3_bucket.etl_bucket.id}/destination/"
+  }
+
+  schema_change_policy {
+    delete_behavior = "LOG"
+    update_behavior = "UPDATE_IN_DATABASE"
+  }
+
+  configuration = jsonencode({
+    Version = 1.0
+    Grouping = {
+      TableGroupingPolicy = "CombineCompatibleSchemas"
+    }
+  })
+
+  tags = {
+    Name = "${var.project_name}-destination-crawler"
+  }
+}
+
+# Auto-trigger source crawler to sync schema changes
 # Crawler will UPDATE the existing table (won't change SerDe)
 resource "null_resource" "trigger_crawler" {
   depends_on = [
