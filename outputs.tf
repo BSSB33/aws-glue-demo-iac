@@ -1,0 +1,55 @@
+# S3 Bucket Outputs
+output "s3_bucket_name" {
+  description = "Name of the S3 bucket for ETL pipeline"
+  value       = aws_s3_bucket.etl_bucket.id
+}
+
+output "s3_bucket_arn" {
+  description = "ARN of the S3 bucket"
+  value       = aws_s3_bucket.etl_bucket.arn
+}
+
+output "source_data_path" {
+  description = "S3 path for source data"
+  value       = "s3://${aws_s3_bucket.etl_bucket.id}/source/"
+}
+
+output "destination_data_path" {
+  description = "S3 path for transformed data"
+  value       = "s3://${aws_s3_bucket.etl_bucket.id}/destination/"
+}
+
+# Glue Database Outputs
+output "glue_database_name" {
+  description = "Name of the Glue Data Catalog database"
+  value       = aws_glue_catalog_database.etl_database.name
+}
+
+# Glue Crawler Outputs
+output "glue_crawler_name" {
+  description = "Name of the Glue crawler"
+  value       = aws_glue_crawler.source_crawler.name
+}
+
+# Glue Job Outputs
+output "glue_job_name" {
+  description = "Name of the Glue ETL job"
+  value       = aws_glue_job.etl_job.name
+}
+
+# IAM Role Outputs
+output "glue_role_arn" {
+  description = "ARN of the Glue service IAM role"
+  value       = aws_iam_role.glue_role.arn
+}
+
+# Console URLs
+output "glue_console_url" {
+  description = "AWS Console URL for Glue Jobs"
+  value       = "https://${var.aws_region}.console.aws.amazon.com/glue/home?region=${var.aws_region}#/v2/etl-jobs"
+}
+
+output "s3_console_url" {
+  description = "AWS Console URL for S3 bucket"
+  value       = "https://s3.console.aws.amazon.com/s3/buckets/${aws_s3_bucket.etl_bucket.id}"
+}

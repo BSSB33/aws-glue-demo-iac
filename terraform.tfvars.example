@@ -1,0 +1,15 @@
+# AWS Configuration
+# aws_region  = "eu-west-1"
+# aws_profile = "vitraigabor"
+
+# Project Configuration
+# project_name = "etl-demo-project"
+# environment  = "production"
+
+# S3 Configuration
+# bucket_name = "vitraiaws-etl-demo-project"
+
+# Glue Configuration
+# glue_version       = "4.0"
+# worker_type        = "G.1X"
+# number_of_workers  = 2
