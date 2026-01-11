@@ -1,0 +1,136 @@
+{
+  "Comment": "ETL Pipeline Orchestration: Source Crawler → Glue Job → Destination Crawler",
+  "StartAt": "StartSourceCrawler",
+  "States": {
+    "StartSourceCrawler": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": {
+        "Name": "${source_crawler_name}"
+      },
+      "ResultPath": "$.CrawlerStart",
+      "Next": "WaitForSourceCrawler",
+      "Catch": [
+        {
+          "ErrorEquals": ["Glue.CrawlerRunningException"],
+          "Next": "WaitForSourceCrawler",
+          "ResultPath": "$.CrawlerAlreadyRunning"
+        },
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "PipelineFailed",
+          "ResultPath": "$.Error"
+        }
+      ]
+    },
+    "WaitForSourceCrawler": {
+      "Type": "Wait",
+      "Seconds": 10,
+      "Next": "CheckSourceCrawlerStatus"
+    },
+    "CheckSourceCrawlerStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {
+        "Name": "${source_crawler_name}"
+      },
+      "ResultSelector": {
+        "State.$": "$.Crawler.State"
+      },
+      "ResultPath": "$.CrawlerStatus",
+      "Next": "IsSourceCrawlerComplete"
+    },
+    "IsSourceCrawlerComplete": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.CrawlerStatus.State",
+          "StringEquals": "READY",
+          "Next": "StartGlueJob"
+        }
+      ],
+      "Default": "WaitForSourceCrawler"
+    },
+    "StartGlueJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "${glue_job_name}"
+      },
+      "ResultPath": "$.JobRun",
+      "Next": "StartDestinationCrawler",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "GlueJobFailed",
+          "ResultPath": "$.JobError"
+        }
+      ]
+    },
+    "StartDestinationCrawler": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Parameters": {
+        "Name": "${destination_crawler_name}"
+      },
+      "ResultPath": "$.DestCrawlerStart",
+      "Next": "WaitForDestinationCrawler",
+      "Catch": [
+        {
+          "ErrorEquals": ["Glue.CrawlerRunningException"],
+          "Next": "WaitForDestinationCrawler",
+          "ResultPath": "$.DestCrawlerAlreadyRunning"
+        },
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "PipelineFailed",
+          "ResultPath": "$.Error"
+        }
+      ]
+    },
+    "WaitForDestinationCrawler": {
+      "Type": "Wait",
+      "Seconds": 10,
+      "Next": "CheckDestinationCrawlerStatus"
+    },
+    "CheckDestinationCrawlerStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+      "Parameters": {
+        "Name": "${destination_crawler_name}"
+      },
+      "ResultSelector": {
+        "State.$": "$.Crawler.State"
+      },
+      "ResultPath": "$.DestCrawlerStatus",
+      "Next": "IsDestinationCrawlerComplete"
+    },
+    "IsDestinationCrawlerComplete": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.DestCrawlerStatus.State",
+          "StringEquals": "READY",
+          "Next": "PipelineSuccess"
+        }
+      ],
+      "Default": "WaitForDestinationCrawler"
+    },
+    "GlueJobFailed": {
+      "Type": "Pass",
+      "Result": {
+        "Status": "FAILED",
+        "Message": "Glue ETL job failed"
+      },
+      "Next": "PipelineFailed"
+    },
+    "PipelineFailed": {
+      "Type": "Fail",
+      "Error": "PipelineExecutionFailed",
+      "Cause": "One or more steps in the ETL pipeline failed"
+    },
+    "PipelineSuccess": {
+      "Type": "Succeed"
+    }
+  }
+}
