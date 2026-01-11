@@ -30,14 +30,31 @@ This project showcases an end-to-end ETL pipeline using AWS Glue, S3, and Infras
   - Handles data quality issues
   - Outputs to Parquet for better performance
 
-- **IAM Role**: Least-privilege permissions for Glue service
+- **IAM Roles**: Least-privilege permissions for Glue and Lambda services
+
+- **EventBridge Rule**: Detects Glue job completion events (SUCCEEDED, FAILED, STOPPED)
+
+- **Lambda Function**: Serverless automation that:
+  - Triggered by EventBridge when Glue job completes
+  - Automatically starts destination crawler
+  - Logs execution to CloudWatch for monitoring
+
+- **Step Functions State Machine**: Complete orchestration workflow that:
+  - Manages the entire ETL pipeline lifecycle
+  - Coordinates source crawler → Glue job → destination crawler
+  - Includes automatic status polling and error handling
+  - Provides visual workflow execution tracking
+  - Can be triggered manually or via EventBridge/API
 
 ### Data Flow
 
 1. Source CSV file uploaded to `s3://bucket/source/`
-2. Glue Crawler scans and catalogs schema
+2. Source Glue Crawler scans and catalogs schema
 3. Glue ETL job reads from catalog, transforms data
 4. Transformed data written to `s3://bucket/destination/` as Parquet
+5. **EventBridge detects job completion event**
+6. **Lambda function auto-triggers destination crawler**
+7. Destination crawler catalogs Parquet files for Athena queries
 
 ## Prerequisites
 
@@ -57,13 +74,21 @@ This project showcases an end-to-end ETL pipeline using AWS Glue, S3, and Infras
 ├── terraform.tfvars.example # Example variable values
 ├── s3.tf                   # S3 bucket and objects
 ├── iam.tf                  # IAM roles and policies (least privilege)
-├── glue_catalog.tf         # Glue database and crawler
+├── glue_catalog.tf         # Glue database and crawlers
+├── glue_table.tf           # Pre-defined Glue table with OpenCSVSerde
 ├── glue_job.tf             # Glue ETL job definition
+├── eventbridge.tf          # EventBridge rule for job completion
+├── lambda.tf               # Lambda function for automation
+├── step_functions.tf       # Step Functions state machine
 ├── outputs.tf              # Terraform outputs
 ├── data/
-│   └── organizations.csv   # Sample source data
-└── scripts/
-    └── etl_job.py          # Glue ETL job script
+│   └── netflix_titles.csv  # Netflix dataset (source data)
+├── lambda/
+│   └── trigger_destination_crawler.py  # Lambda function code
+├── scripts/
+│   └── etl_job.py          # Glue ETL job script
+└── step_functions/
+    └── etl_pipeline_state_machine.json  # State machine definition
 ```
 
 ## Setup Instructions
@@ -125,12 +150,37 @@ aws s3 ls s3://vitraiaws-etl-demo-project/destination/ --recursive --profile vit
 
 ## Running the Pipeline
 
-The pipeline requires manual execution of the ETL job and destination crawler:
+### Automated Execution (Recommended)
 
-### Step 1: Run the ETL Job
+The pipeline features **full automation** using EventBridge and Lambda:
 
-After `terraform apply`, the source data is cataloged automatically. Run the transformation job:
+```bash
+terraform apply
+```
 
+**What happens automatically:**
+1. ✅ Source crawler catalogs CSV data (~30 seconds)
+2. ✅ Glue ETL job transforms data to Parquet (~2-4 minutes)
+3. ✅ **EventBridge detects job completion**
+4. ✅ **Lambda function auto-triggers destination crawler** (~30 seconds)
+5. ✅ Data ready to query in Athena!
+
+**Total time**: ~3-5 minutes for complete pipeline execution
+
+**Monitoring:**
+```bash
+# Watch Lambda logs to see auto-trigger in action
+aws logs tail /aws/lambda/etl-demo-project-trigger-destination-crawler \
+  --region eu-west-1 \
+  --profile vitraigabor \
+  --follow
+```
+
+### Manual Execution (Optional)
+
+You can also run steps manually for testing:
+
+**Step 1: Run ETL Job**
 ```bash
 aws glue start-job-run \
   --job-name etl-demo-project-etl-job \
@@ -138,24 +188,56 @@ aws glue start-job-run \
   --profile vitraigabor
 ```
 
-**Job Duration**: ~2-4 minutes for ~8,800 Netflix titles
+**Step 2: Query Results** (Destination crawler auto-runs via Lambda!)
 
-### Step 2: Catalog the Transformed Data
+### Step Functions Orchestration (Alternative)
 
-**Important**: After the Glue job completes successfully, run the destination crawler to catalog the transformed Parquet files:
+The project includes an **AWS Step Functions state machine** that orchestrates the entire ETL pipeline. This provides several advantages:
+
+- **Visual workflow**: See the execution progress in the AWS Console
+- **Automatic retries**: Built-in error handling and retry logic
+- **Status polling**: Waits for crawlers and jobs to complete
+- **Single execution**: One command runs the entire pipeline end-to-end
+
+**Run the complete pipeline with Step Functions:**
 
 ```bash
-aws glue start-crawler \
-  --name etl-demo-project-destination-crawler \
+# Start execution via AWS CLI
+aws stepfunctions start-execution \
+  --state-machine-arn $(terraform output -raw step_functions_state_machine_arn) \
   --region eu-west-1 \
   --profile vitraigabor
+
+# Or via Console
+# Visit: https://console.aws.amazon.com/states (use URL from outputs)
 ```
 
-**Crawler Duration**: ~30 seconds
+**Monitor execution:**
+- AWS Console → Step Functions → State machines → `etl-demo-project-etl-pipeline`
+- Visual graph shows current step and execution status
+- CloudWatch logs available at `/aws/vendedlogs/states/etl-demo-project-etl-pipeline`
 
-### Step 3: Query in Athena
+**Workflow steps:**
+1. Start source crawler
+2. Poll until source crawler completes (10-second intervals)
+3. Start Glue ETL job (synchronous - waits for completion)
+4. Start destination crawler
+5. Poll until destination crawler completes (10-second intervals)
+6. Pipeline success or failure
 
-Once the destination crawler completes, you can query the transformed data:
+**Error handling:**
+- If source crawler fails → Pipeline fails
+- If Glue job fails → Captured and routed to failure state
+- If destination crawler fails → Pipeline fails
+- All errors logged with details
+
+**Note:** Step Functions and EventBridge/Lambda automation can **coexist**:
+- Step Functions: For manual, orchestrated executions
+- EventBridge + Lambda: Safety net for any job completion (manual or automated)
+
+### Query in Athena
+
+After the pipeline completes, query the transformed data:
 
 ```sql
 -- Query source data (CSV)
@@ -259,9 +341,15 @@ The ETL job demonstrates 8 comprehensive transformation types:
 - **S3**: Minimal storage costs for sample data
 - **Glue Crawler**: Charged per DPU-hour (typically completes in < 1 minute)
 - **Glue Job**: Charged per DPU-hour (2 DPUs × job duration)
+- **Lambda**: Free tier covers demo usage (1M requests/month free)
+- **EventBridge**: Free for custom rules (no charge)
+- **Step Functions**: $0.025 per 1,000 state transitions (Express: $0.000001 per execution)
+  - Standard workflow: ~7-10 state transitions per execution = ~$0.0002 per run
 - **CloudWatch Logs**: Minimal for demo purposes
 
-Estimated cost per run: < $0.50 USD
+**Estimated cost per run:**
+- Without Step Functions: < $0.50 USD
+- With Step Functions: < $0.51 USD (minimal additional cost)
 
 ## Cleanup
 

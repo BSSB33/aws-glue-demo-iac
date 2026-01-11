@@ -176,3 +176,98 @@ resource "aws_iam_role_policy" "lambda_cloudwatch_policy" {
     ]
   })
 }
+
+# IAM Role for Step Functions
+resource "aws_iam_role" "step_functions_role" {
+  name = "${var.project_name}-step-functions-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "states.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.project_name}-step-functions-role"
+  }
+}
+
+# IAM Policy: Allow Step Functions to manage Glue crawlers
+resource "aws_iam_role_policy" "step_functions_glue_crawler_policy" {
+  name = "${var.project_name}-step-functions-glue-crawler-policy"
+  role = aws_iam_role.step_functions_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "glue:StartCrawler",
+          "glue:GetCrawler"
+        ]
+        Resource = [
+          aws_glue_crawler.source_crawler.arn,
+          aws_glue_crawler.destination_crawler.arn
+        ]
+      }
+    ]
+  })
+}
+
+# IAM Policy: Allow Step Functions to start and monitor Glue jobs
+resource "aws_iam_role_policy" "step_functions_glue_job_policy" {
+  name = "${var.project_name}-step-functions-glue-job-policy"
+  role = aws_iam_role.step_functions_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "glue:StartJobRun",
+          "glue:GetJobRun",
+          "glue:GetJobRuns",
+          "glue:BatchStopJobRun"
+        ]
+        Resource = [
+          aws_glue_job.etl_job.arn
+        ]
+      }
+    ]
+  })
+}
+
+# IAM Policy: CloudWatch Logs for Step Functions
+resource "aws_iam_role_policy" "step_functions_cloudwatch_policy" {
+  name = "${var.project_name}-step-functions-cloudwatch-policy"
+  role = aws_iam_role.step_functions_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogDelivery",
+          "logs:GetLogDelivery",
+          "logs:UpdateLogDelivery",
+          "logs:DeleteLogDelivery",
+          "logs:ListLogDeliveries",
+          "logs:PutResourcePolicy",
+          "logs:DescribeResourcePolicies",
+          "logs:DescribeLogGroups"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}

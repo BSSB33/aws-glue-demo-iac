@@ -43,8 +43,6 @@ resource "aws_glue_job" "etl_job" {
   ]
 }
 
-# Null resource to trigger Glue job after crawler completes
-# Note: This will wait for the crawler to finish before starting the job
 resource "null_resource" "trigger_glue_job" {
   depends_on = [
     aws_glue_job.etl_job,

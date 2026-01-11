@@ -80,3 +80,15 @@ output "lambda_logs_url" {
   description = "CloudWatch Logs URL for Lambda function"
   value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#logsV2:log-groups/log-group/$252Faws$252Flambda$252F${aws_lambda_function.trigger_destination_crawler.function_name}"
 }
+
+# Step Functions Outputs
+output "step_functions_state_machine_arn" {
+  description = "ARN of the Step Functions state machine"
+  value       = aws_sfn_state_machine.etl_pipeline.arn
+}
+
+output "step_functions_state_machine_name" {
+  description = "Name of the Step Functions state machine"
+  value       = aws_sfn_state_machine.etl_pipeline.name
+}
+
