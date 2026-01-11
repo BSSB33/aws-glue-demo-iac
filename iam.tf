@@ -109,3 +109,70 @@ resource "aws_iam_role_policy" "glue_cloudwatch_policy" {
     ]
   })
 }
+
+# IAM Role for Lambda Function
+resource "aws_iam_role" "lambda_trigger_crawler_role" {
+  name = "${var.project_name}-lambda-trigger-crawler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.project_name}-lambda-role"
+  }
+}
+
+# IAM Policy: Allow Lambda to start Glue Crawler
+resource "aws_iam_role_policy" "lambda_start_crawler_policy" {
+  name = "${var.project_name}-lambda-start-crawler-policy"
+  role = aws_iam_role.lambda_trigger_crawler_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "glue:StartCrawler",
+          "glue:GetCrawler"
+        ]
+        Resource = [
+          aws_glue_crawler.destination_crawler.arn
+        ]
+      }
+    ]
+  })
+}
+
+# IAM Policy: CloudWatch Logs for Lambda
+resource "aws_iam_role_policy" "lambda_cloudwatch_policy" {
+  name = "${var.project_name}-lambda-cloudwatch-policy"
+  role = aws_iam_role.lambda_trigger_crawler_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = [
+          "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${var.project_name}-trigger-destination-crawler:*"
+        ]
+      }
+    ]
+  })
+}

@@ -58,3 +58,25 @@ output "s3_console_url" {
   description = "AWS Console URL for S3 bucket"
   value       = "https://s3.console.aws.amazon.com/s3/buckets/${aws_s3_bucket.etl_bucket.id}"
 }
+
+# Lambda Function Outputs
+output "lambda_function_name" {
+  description = "Name of the Lambda function that triggers destination crawler"
+  value       = aws_lambda_function.trigger_destination_crawler.function_name
+}
+
+output "lambda_function_arn" {
+  description = "ARN of the Lambda function"
+  value       = aws_lambda_function.trigger_destination_crawler.arn
+}
+
+# EventBridge Outputs
+output "eventbridge_rule_name" {
+  description = "Name of the EventBridge rule for Glue job completion"
+  value       = aws_cloudwatch_event_rule.glue_job_completion.name
+}
+
+output "lambda_logs_url" {
+  description = "CloudWatch Logs URL for Lambda function"
+  value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#logsV2:log-groups/log-group/$252Faws$252Flambda$252F${aws_lambda_function.trigger_destination_crawler.function_name}"
+}
